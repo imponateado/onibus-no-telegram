@@ -1,6 +1,6 @@
 # 🚌 Bot de Rastreamento de Ônibus DF
 
-Um bot do Telegram inteligente que fornece informações precisas e em tempo real sobre ônibus públicos do Distrito Federal, utilizando dados oficiais da SEMOB-DF.
+Um bot do Telegram que fornece informações precisas e em tempo real sobre ônibus públicos do Distrito Federal, utilizando dados oficiais da SEMOB-DF.
 
 ## ✨ Funcionalidades
 
@@ -8,10 +8,8 @@ Um bot do Telegram inteligente que fornece informações precisas e em tempo rea
 - ⏱️ **Previsão de chegada** com algoritmos avançados de precisão
 - 🎯 **Múltiplos níveis de confiança** (alto, médio, baixo)
 - 🚦 **Análise de trânsito** com fatores de horário de pico
-- 📊 **Horários programados** das linhas
-- 🔄 **Atualizações automáticas** a cada 20 segundos
+- 📊 **Horários programados** das linha
 - 🎛️ **Filtros personalizáveis** por linha e direção
-- 📱 **Interface intuitiva** com teclados personalizados
 
 ## 🛠️ Tecnologias
 
@@ -33,17 +31,7 @@ Um bot do Telegram inteligente que fornece informações precisas e em tempo rea
 - `oi`, `olá`, `/start` - Inicia uma nova busca
 - `🔄 Atualizar busca` - Atualiza os dados com informações mais recentes
 - `📍 Nova localização` - Define uma nova localização
-
-## 📊 Algoritmo de Precisão
-
-O bot utiliza algoritmos avançados que consideram:
-
-- **Velocidade real** do veículo (quando disponível)
-- **Fatores de trânsito** baseados no horário e dia da semana
-- **Proximidade** e densidade urbana
-- **Idade dos dados** para garantir informações atuais
-- **Aceleração e frenagem** em paradas
-
+- 
 ### Níveis de Confiança
 
 - 🎯 **Alto**: Dados em tempo real com velocidade conhecida
@@ -54,31 +42,25 @@ O bot utiliza algoritmos avançados que consideram:
 
 ### Pré-requisitos
 
-- Node.js 18+ 
-- npm ou yarn
+- Deno
+- pnpm
 - Token do bot do Telegram
 
 ### Instalação
 
 ```bash
 # Clone o repositório
-git clone [url-do-repositorio]
-cd bus-tracker-bot
+git clone https://github.com/imponateado/onibus-no-telegram
+cd onibus-no-telegram
 
 # Instale as dependências
-npm install
+pnpm i
 
 # Configure o token do bot
 # Edite o arquivo bot.ts e substitua o token
 
 # Execute o bot
-npm run start
-```
-
-### Variáveis de Ambiente
-
-```env
-BOT_TOKEN=seu_token_do_telegram_aqui
+deno -IN bot.ts
 ```
 
 ## 📡 APIs Utilizadas
@@ -105,25 +87,6 @@ const PRECISION_CONSTANTS = {
 }
 ```
 
-## 📈 Monitoramento
-
-O bot inclui logs detalhados para monitoramento:
-
-- Atualizações de dados das APIs
-- Estatísticas de veículos processados
-- Erros de conexão e timeout
-- Performance dos algoritmos de cálculo
-
-## 🤝 Contribuição
-
-Contribuições são bem-vindas! Por favor:
-
-1. Faça um fork do projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
-
 ## 📄 Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
@@ -133,13 +96,6 @@ Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalh
 - **Desenvolvido com assistência de**: Claude (Anthropic) - Claude Sonnet 4
 - **Dados fornecidos por**: SEMOB-DF (Secretaria de Mobilidade do Distrito Federal)
 - **Framework de bot**: Grammy (Telegram Bot Framework)
-
-## 📞 Suporte
-
-Para dúvidas, sugestões ou problemas:
-
-- Abra uma issue no GitHub
-- Entre em contato através do próprio bot
 
 ---
 
