@@ -1,6 +1,6 @@
 import { Bot } from "grammy";
 
-const bot = new Bot("7722570432:AAEp8EH3ufQhseDiR661wlcjKhO1w-ru-NQ");
+const bot = new Bot("");
 
 let cachedPositionData: any[] | null = null;
 let cachedRouteData: any[] | null = null;
