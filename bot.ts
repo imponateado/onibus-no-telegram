@@ -1,12 +1,14 @@
 import { Bot } from "grammy";
 
-const bot = new Bot(""); //pegue o token de um BOT no @BotFather
+const bot = new Bot("7722570432:AAEp8EH3ufQhseDiR661wlcjKhO1w-ru-NQ");
 
 let cachedPositionData: any[] | null = null;
 let cachedRouteData: any[] | null = null;
 let cachedScheduleData: any[] | null = null;
 
-const userPreferences = new Map();
+const userPreferences = new Map<number, any>();
+const userUpdateCounters = new Map<number, number>();
+const userIntervals = new Map<number, NodeJS.Timeout>();
 
 const APIS = {
     POSITION: "https://geoserver.semob.df.gov.br/geoserver/semob/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=semob%3AUltima%20Posicao%20Transmitida&outputFormat=application%2Fjson",
@@ -16,19 +18,16 @@ const APIS = {
 
 const PRECISION_CONSTANTS = {
     MAX_DATA_AGE_MINUTES: 15,
-    
     MIN_SPEED_KMH: 8,
     MAX_SPEED_KMH: 60,
     DEFAULT_SPEED_KMH: 15,
-    
     MAX_SEARCH_RADIUS_M: 5000,
     STOP_PROXIMITY_M: 100,
-    
     TRAFFIC_FACTOR: 1.3,
     ACCELERATION_FACTOR: 1.2,
-    
     PEAK_HOURS: [[7, 9], [17, 19]],
     NIGHT_HOURS: [22, 6],
+    MAX_AUTO_UPDATES: 10
 };
 
 function haversineImproved(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -116,10 +115,6 @@ function isVehicleInOperation(vehicle: any): boolean {
         return false;
     }
 
-    if (props.velocidade !== undefined && props.velocidade < 2) {
-        return true;
-    }
-
     return true;
 }
 
@@ -179,11 +174,7 @@ function filterAndSortBuses(nearbyBuses: any[]): any[] {
         .filter(bus => {
             return bus.confidence !== 'low' || bus.distance < 1000;
         })
-        .sort((a, b) => {
-            const scoreA = a.timeMinutes + (a.confidence === 'low' ? 10 : 0);
-            const scoreB = b.timeMinutes + (b.confidence === 'low' ? 10 : 0);
-            return scoreA - scoreB;
-        });
+        .sort((a, b) => a.distance - b.distance);
 }
 
 function getNextSchedules(lineCode: string, direction: string) {
@@ -231,7 +222,6 @@ function getNextSchedules(lineCode: string, direction: string) {
 
 async function updatePositionData() {
     try {
-        console.log("Atualizando dados de posição...");
         const response = await fetch(APIS.POSITION, {
             method: "GET",
             headers: {
@@ -244,7 +234,6 @@ async function updatePositionData() {
         if (response.ok) {
             const data = await response.json();
             cachedPositionData = data.features || [];
-            console.log(`Dados de posição atualizados: ${cachedPositionData.length} veículos`);
         } else {
             console.error("Erro ao atualizar posições SEMOB:", response.status);
         }
@@ -255,7 +244,6 @@ async function updatePositionData() {
 
 async function updateRouteData() {
     try {
-        console.log("Atualizando dados de rotas...");
         const response = await fetch(APIS.ROUTES, {
             method: "GET",
             headers: {
@@ -268,7 +256,6 @@ async function updateRouteData() {
         if (response.ok) {
             const data = await response.json();
             cachedRouteData = data.features || [];
-            console.log(`Dados de rotas atualizados: ${cachedRouteData.length} linhas`);
         } else {
             console.error("Erro ao atualizar rotas SEMOB:", response.status);
         }
@@ -279,7 +266,6 @@ async function updateRouteData() {
 
 async function updateScheduleData() {
     try {
-        console.log("Atualizando dados de horários...");
         const response = await fetch(APIS.SCHEDULE, {
             method: "GET",
             headers: {
@@ -292,7 +278,6 @@ async function updateScheduleData() {
         if (response.ok) {
             const data = await response.json();
             cachedScheduleData = data.features || [];
-            console.log(`Dados de horários atualizados: ${cachedScheduleData.length} horários`);
         } else {
             console.error("Erro ao atualizar horários SEMOB:", response.status);
         }
@@ -305,10 +290,9 @@ updatePositionData();
 updateRouteData();
 updateScheduleData();
 
-// Atualizar dados com frequência otimizada para precisão
-setInterval(updatePositionData, 40000); // 20s para posições (mais frequente)
-setInterval(updateRouteData, 172800);   // 5min para rotas
-setInterval(updateScheduleData, 172800); // 5min para horários
+setInterval(updatePositionData, 40000);
+setInterval(updateRouteData, 172800);
+setInterval(updateScheduleData, 172800);
 
 function getLineInfo(lineCode: string) {
     if (!cachedRouteData) return null;
@@ -328,15 +312,50 @@ function createUpdateKeyboard() {
     };
 }
 
+function startAutoUpdates(ctx: any, userPref: any, userId: number) {
+    stopAutoUpdates(userId);
+    
+    userUpdateCounters.set(userId, 0);
+    
+    const intervalId = setInterval(async () => {
+        const count = userUpdateCounters.get(userId) || 0;
+        
+        if (count >= PRECISION_CONSTANTS.MAX_AUTO_UPDATES) {
+            stopAutoUpdates(userId);
+            await ctx.reply("🔴 Atualizações automáticas encerradas. Envie 'oi' para nova busca.");
+            return;
+        }
+        
+        try {
+            await searchBuses(ctx, userPref, true);
+            userUpdateCounters.set(userId, count + 1);
+        } catch (error) {
+            console.error("Erro na atualização automática:", error);
+        }
+    }, 60000);
+    
+    userIntervals.set(userId, intervalId);
+}
+
+function stopAutoUpdates(userId: number) {
+    const intervalId = userIntervals.get(userId);
+    if (intervalId) {
+        clearInterval(intervalId);
+        userIntervals.delete(userId);
+    }
+    userUpdateCounters.delete(userId);
+}
+
 bot.hears(["oi", "Oi", "OI", "olá", "Olá", "OLÁ", "start", "/start"], (ctx) => {
     const userId = ctx.from?.id;
     if (userId) {
+        stopAutoUpdates(userId);
         userPreferences.delete(userId);
     }
     
     return ctx.reply(
-        "🚌 Olá! Vou te ajudar a encontrar ônibus próximos com máxima precisão usando dados oficiais da SEMOB.\n\n" +
-        "Primeiro, me envie sua localização:",
+        "🚌 Olá! Encontrarei ônibus próximos usando dados da SEMOB.\n\n" +
+        "Por favor, envie sua localização:",
         {
             reply_markup: {
                 keyboard: [
@@ -389,12 +408,12 @@ bot.hears("🔄 Atualizar busca", async (ctx) => {
 
     const userPref = userPreferences.get(userId);
     if (!userPref || !userPref.latitude || !userPref.direction || !userPref.busLine) {
-        await ctx.reply("❌ Não encontrei suas preferências salvas. Digite 'oi' para começar uma nova busca.");
+        await ctx.reply("❌ Preferências não encontradas. Digite 'oi' para nova busca.");
         return;
     }
 
-    await ctx.reply("🔄 Atualizando busca com dados mais recentes...");
-    await searchBuses(ctx, userPref);
+    await ctx.reply("🔄 Atualizando busca...");
+    await searchBuses(ctx, userPref, false);
 });
 
 bot.on("message:location", async (ctx) => {
@@ -413,8 +432,8 @@ bot.on("message:location", async (ctx) => {
     userPreferences.set(userId, userPref);
 
     await ctx.reply(
-        "📍 Localização recebida com precisão!\n\n" +
-        "Agora escolha o sentido dos ônibus:",
+        "📍 Localização recebida!\n\n" +
+        "Escolha o sentido dos ônibus:",
         {
             reply_markup: {
                 keyboard: [
@@ -434,7 +453,7 @@ bot.hears(["🔄 IDA e VOLTA", "➡️ Apenas IDA", "⬅️ Apenas VOLTA"], asyn
 
     const userPref = userPreferences.get(userId);
     if (!userPref || userPref.step !== 'location_received') {
-        await ctx.reply("❌ Por favor, envie sua localização primeiro digitando 'oi'.");
+        await ctx.reply("❌ Envie sua localização primeiro digitando 'oi'.");
         return;
     }
 
@@ -452,9 +471,9 @@ bot.hears(["🔄 IDA e VOLTA", "➡️ Apenas IDA", "⬅️ Apenas VOLTA"], asyn
     userPreferences.set(userId, userPref);
 
     await ctx.reply(
-        "🚌 Agora escolha qual linha você quer:\n\n" +
-        "• Digite o número/código da linha (ex: 0.123, W3, etc.)\n" +
-        "• Ou digite 'TODAS' para ver todas as linhas",
+        "🚌 Escolha a linha:\n\n" +
+        "• Digite o número da linha (ex: 0.123, W3)\n" +
+        "• Ou digite 'TODAS' para todas as linhas",
         {
             reply_markup: {
                 keyboard: [
@@ -489,16 +508,14 @@ bot.on("message:text", async (ctx) => {
     userPref.step = 'completed';
     userPreferences.set(userId, userPref);
 
-    await searchBuses(ctx, userPref);
+    await searchBuses(ctx, userPref, false);
 });
 
-async function searchBuses(ctx: any, userPref: any) {
+async function searchBuses(ctx: any, userPref: any, isAutoUpdate: boolean = false) {
     const { latitude: userLat, longitude: userLon, direction, busLine } = userPref;
 
     if (!cachedPositionData) {
-        await ctx.reply(
-            "⏳ Ainda estou carregando os dados dos ônibus da SEMOB, tente novamente em alguns segundos.",
-        );
+        await ctx.reply("⏳ Carregando dados dos ônibus, tente novamente em alguns segundos.");
         return;
     }
 
@@ -514,14 +531,10 @@ async function searchBuses(ctx: any, userPref: any) {
     for (const vehicle of cachedPositionData) {
         stats.total++;
 
-        if (!isVehicleDataValid(vehicle)) {
-            continue;
-        }
+        if (!isVehicleDataValid(vehicle)) continue;
         stats.validData++;
 
-        if (!isVehicleInOperation(vehicle)) {
-            continue;
-        }
+        if (!isVehicleInOperation(vehicle)) continue;
         stats.operating++;
 
         const props = vehicle.properties;
@@ -529,124 +542,78 @@ async function searchBuses(ctx: any, userPref: any) {
         if (busLine !== "ALL") {
             const vehicleLine = (props.numerolinha || "").trim().toUpperCase();
             const searchLine = busLine.trim().toUpperCase();
-            
-            if (vehicleLine !== searchLine) {
-                continue;
-            }
+            if (vehicleLine !== searchLine) continue;
         }
 
         const distance = haversineImproved(userLat, userLon, props.latitude, props.longitude);
-
-        if (distance <= PRECISION_CONSTANTS.MAX_SEARCH_RADIUS_M) {
-            stats.inRadius++;
+        if (distance > PRECISION_CONSTANTS.MAX_SEARCH_RADIUS_M) continue;
+        stats.inRadius++;
             
-            const arrivalData = calculateArrivalTime(userLat, userLon, vehicle);
-            
-            const lineInfo = getLineInfo(props.numerolinha);
-            const nextSchedules = getNextSchedules(props.numerolinha, direction);
+        const arrivalData = calculateArrivalTime(userLat, userLon, vehicle);
+        const nextSchedules = getNextSchedules(props.numerolinha, direction);
 
-            nearbyBuses.push({
-                imei: props.imei,
-                linha: props.numerolinha || "Sem linha",
-                lineName: lineInfo?.properties?.nome || "Nome não disponível",
-                distance: Math.round(distance),
-                timeMinutes: arrivalData.timeMinutes,
-                confidence: arrivalData.confidence,
-                factors: arrivalData.factors,
-                speedKmh: props.velocidade || 0,
-                isEstimatedSpeed: props.velocidade === 0,
-                lastUpdate: props.datalocal,
-                nextSchedules: nextSchedules,
-                tarifa: lineInfo?.properties?.tarifa || "Não informada",
-                dataAge: Math.round((Date.now() - new Date(props.datalocal).getTime()) / 60000) // idade em minutos
-            });
-        }
+        nearbyBuses.push({
+            linha: props.numerolinha || "Sem linha",
+            distance: Math.round(distance),
+            nextSchedules: nextSchedules,
+            dataAge: Math.round((Date.now() - new Date(props.datalocal).getTime()) / 60000)
+        });
     }
 
     const filteredBuses = filterAndSortBuses(nearbyBuses);
     stats.filtered = filteredBuses.length;
 
-    console.log(`Stats SEMOB: ${stats.total} total, ${stats.validData} válidos, ${stats.operating} operando, ${stats.inRadius} no raio, ${stats.filtered} após filtros`);
-
-    let filterInfo = "";
-    if (direction !== "BOTH") {
-        filterInfo += `Direção: ${direction}\n`;
-    }
-    if (busLine !== "ALL") {
-        filterInfo += `Linha: ${busLine}\n`;
-    }
-
-    const trafficFactor = getTrafficFactor();
-    const configInfo = `📋 Configuração atual:\n${filterInfo}📍 Localização: Salva\n🚦 Fator trânsito: ${trafficFactor.toFixed(1)}x\n\n`;
-
     if (filteredBuses.length === 0) {
         await ctx.reply(
-            `🚌 Não encontrei ônibus em operação a até ${PRECISION_CONSTANTS.MAX_SEARCH_RADIUS_M/1000} km da sua localização.\n\n` +
-            `${configInfo}` +
-            `📊 Análise dos dados:\n` +
-            `• ${stats.validData} veículos com dados válidos (${stats.total} total)\n` +
-            `• ${stats.operating} em operação\n` +
-            `• ${stats.inRadius} no raio de busca\n` +
-            `• Dados atualizados a cada 20s`,
-            {
-                reply_markup: createUpdateKeyboard(),
-            }
+            `🚌 Nenhum ônibus encontrado em até ${PRECISION_CONSTANTS.MAX_SEARCH_RADIUS_M/1000} km`,
+            { reply_markup: isAutoUpdate ? undefined : createUpdateKeyboard() }
         );
         return;
     }
 
-    const maxBusesToShow = 15;
-    const lines = filteredBuses.slice(0, maxBusesToShow).map((bus) => {
-        const confidenceIcon = {
-            'high': '🎯',
-            'medium': '📍', 
-            'low': '⚠️'
-        }[bus.confidence];
-        
-        let line = `${confidenceIcon} **${bus.linha}** - ${bus.timeMinutes} min`;
-        
-        if (bus.confidence === 'high') {
-            line += ` (preciso)`;
-        } else if (bus.confidence === 'low') {
-            line += ` (estimado)`;
-        }
-        
-        if (bus.dataAge <= 1) {
-            line += ` • 🔴 ao vivo`;
-        } else if (bus.dataAge <= 5) {
-            line += ` • 🟡 ${bus.dataAge}min`;
+    // Agrupar ônibus por linha
+    const busesByLine: Record<string, any> = {};
+    filteredBuses.forEach(bus => {
+        const line = bus.linha;
+        if (!busesByLine[line]) {
+            busesByLine[line] = {
+                minDistance: bus.distance,
+                schedules: bus.nextSchedules.map((s: any) => s.time).join(', ')
+            };
         } else {
-            line += ` • 🟠 ${bus.dataAge}min`;
+            // Manter a menor distância encontrada para esta linha
+            if (bus.distance < busesByLine[line].minDistance) {
+                busesByLine[line].minDistance = bus.distance;
+            }
         }
-        
-        if (bus.lineName !== "Nome não disponível") {
-            line += `\n   📍 ${bus.lineName}`;
-        }
-        
-        line += `\n   📏 ${bus.distance}m`;
-        if (bus.speedKmh > 0) {
-            line += ` • 🚌 ${bus.speedKmh}km/h`;
-        }
-        
-        if (bus.nextSchedules.length > 0) {
-            const nextTimes = bus.nextSchedules.slice(0, 2).map(s => s.time).join(', ');
-            line += `\n   ⏰ Próximos: ${nextTimes}`;
-        }
-        
-        return line;
     });
 
-    const message = `🚌 **Ônibus próximos (precisão otimizada):**\n\n` +
-        `${configInfo}` +
-        `${lines.join("\n\n")}` +
-        (filteredBuses.length > maxBusesToShow
-            ? `\n\n➕ E mais ${filteredBuses.length - maxBusesToShow} ônibus...`
-            : "") +
-        `\n\n📊 Dados: ${stats.filtered} ônibus de ${stats.operating} em operação`;
+    // Formatar resultados
+    const results = [];
+    for (const [line, data] of Object.entries(busesByLine)) {
+        results.push(`${line} - ${data.minDistance}m - 🕒 ${data.schedules || 'Sem horários'}`);
+    }
+
+    // Limitar a 10 linhas para evitar mensagem muito longa
+    const maxLines = 10;
+    const displayedResults = results.slice(0, maxLines);
+    
+    let message = "🚌 Ônibus perto de você:\n\n";
+    message += displayedResults.join("\n");
+    
+    if (results.length > maxLines) {
+        message += `\n\n➕ Mais ${results.length - maxLines} linhas...`;
+    }
 
     await ctx.reply(message, {
-        reply_markup: createUpdateKeyboard(),
+        reply_markup: isAutoUpdate ? undefined : createUpdateKeyboard(),
     });
+
+    // Iniciar atualizações automáticas
+    const userId = ctx.from?.id;
+    if (userId && !isAutoUpdate) {
+        startAutoUpdates(ctx, userPref, userId);
+    }
 }
 
 bot.catch((err) => {
