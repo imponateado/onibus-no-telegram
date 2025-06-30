@@ -36,7 +36,6 @@ Um bot do Telegram que fornece informações precisas e em tempo real sobre ôni
 ### Pré-requisitos
 
 - Deno
-- pnpm
 - Token do bot do Telegram (pegar com o [@BotFather](https://t.me/@BotFather))
 
 ### Instalação
