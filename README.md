@@ -1,6 +1,6 @@
 # 🚌 Bot de Rastreamento de Ônibus DF
 
-Um bot do Telegram que fornece informações precisas e em tempo real sobre ônibus públicos do Distrito Federal, utilizando dados oficiais da SEMOB-DF.
+Um bot do Telegram que fornece informações sobre ônibus públicos do Distrito Federal, utilizando dados oficiais da SEMOB-DF.
 
 ## ✨ Funcionalidades
 
