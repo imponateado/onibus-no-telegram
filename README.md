@@ -5,8 +5,6 @@ Um bot do Telegram que fornece informações precisas e em tempo real sobre ôni
 ## ✨ Funcionalidades
 
 - 📍 **Localização em tempo real** dos ônibus próximos
-- ⏱️ **Previsão de chegada** com algoritmos avançados de precisão
-- 🎯 **Múltiplos níveis de confiança** (alto, médio, baixo)
 - 🚦 **Análise de trânsito** com fatores de horário de pico
 - 📊 **Horários programados** das linha
 - 🎛️ **Filtros personalizáveis** por linha e direção
@@ -32,11 +30,6 @@ Um bot do Telegram que fornece informações precisas e em tempo real sobre ôni
 - `🔄 Atualizar busca` - Atualiza os dados com informações mais recentes
 - `📍 Nova localização` - Define uma nova localização
 - 
-### Níveis de Confiança
-
-- 🎯 **Alto**: Dados em tempo real com velocidade conhecida
-- 📍 **Médio**: Estimativas baseadas em padrões de tráfego
-- ⚠️ **Baixo**: Projeções com maior margem de incerteza
 
 ## ⚙️ Configuração
 
@@ -44,7 +37,7 @@ Um bot do Telegram que fornece informações precisas e em tempo real sobre ôni
 
 - Deno
 - pnpm
-- Token do bot do Telegram
+- Token do bot do Telegram (pegar com o [@BotFather](https://t.me/@BotFather))
 
 ### Instalação
 
@@ -53,14 +46,11 @@ Um bot do Telegram que fornece informações precisas e em tempo real sobre ôni
 git clone https://github.com/imponateado/onibus-no-telegram
 cd onibus-no-telegram
 
-# Instale as dependências
-pnpm i
-
 # Configure o token do bot
 # Edite o arquivo bot.ts e substitua o token
 
 # Execute o bot
-deno -IN bot.ts
+deno -IN --allow-env --unsafely-ignore-certificate-errors bot.ts
 ```
 
 ## 📡 APIs Utilizadas
